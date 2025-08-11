@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>批量地址信息识别工具</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📋 批量地址信息识别工具</h1>
+            <p>智能识别地址、姓名、电话信息并导出为Excel</p>
+        </header>
+
+        <main>
+            <div class="input-section">
+                <h2>输入文本</h2>
+                <textarea id="inputText" placeholder="请输入需要识别的文本信息，每组信息用换行符分隔&#10;例如：&#10;北京市朝阳区建国路88号,张三,13800138000&#10;上海市浦东新区陆家嘴1号 李四 13900139000&#10;广州市天河区珠江新城2号&#10;王五&#10;13700137000">岗区龙岗街道五联社区瓦陶坑新区1巷4栋 杨毓洵 13679532588
+岗区龙岗街道五联社区瓦陶坑新区3巷1栋 陈燕萍 15820423652
+岗区龙岗街道五联社区瓦陶坑新区1巷1栋 倪翰林 18122827535
+深圳市龙岗区龙岗街道五联社区瓦陶坑新区2巷3栋 张三 13800138000
+北京市朝阳区建国路88号 李四 13900139000
+
+广东省中山市小榄镇吉安村成安大街一巷6号地铺
+萍聚内衣,郑生13322670919
+
+广东省中山市小榄镇吉安村成安大街一巷7号铺
+町其女装,陈春华17666052228|
+
+广东省中山市小榄镇吉安村成安大街一巷8号地铺
+柳州螺蛳粉,罗忠13322670919
+
+广东省中山市小榄镇吉安村成安大街一巷9号铺
+泓善妍美容养,刘敏17666052228
+
+左宣
+15089955150
+
+广东省中山市小榄镇吉安村成安大街一巷10号地铺
+江生
+15089955150
+
+广东省中山市小榄镇吉安村成安大街一巷11号铺
+
+1厦门市翔安区金海街道洞庭南路1-114(放代收点) 郑培斯 18359708859
+
+杭州市富阳区新登镇金城路100号四海家具 YOYO 13800138000
+杭州市富阳区新登镇金城路100号四海家具 Miss Huang 13900139000
+杭州市富阳区新登镇金城路100号邻客公寓 (放优优烟酒店)誓言 13700137000
+杭州市富阳区新登镇金城路100号邻客公寓 (放优优烟酒店)For 13600136000
+福建省永泰县大洋镇棋杆村建辉 13500135000
+福建省永泰县大洋镇溪墘村姜玉 13400134000</textarea>
+                <div class="button-group">
+                    <button id="clearBtn" class="btn btn-secondary">清空</button>
+                    <button id="recognizeBtn" class="btn btn-primary">开始识别</button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h2>识别设置</h2>
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label for="separatorSelect">分隔符类型：</label>
+                        <select id="separatorSelect">
+                            <option value="auto">自动检测</option>
+                            <option value="comma">逗号 (,)</option>
+                            <option value="space">空格</option>
+                            <option value="tab">制表符</option>
+                            <option value="semicolon">分号 (;)</option>
+                            <option value="custom">自定义</option>
+                        </select>
+                    </div>
+                    <div class="setting-item" id="customSeparatorDiv" style="display: none;">
+                        <label for="customSeparator">自定义分隔符：</label>
+                        <input type="text" id="customSeparator" placeholder="输入自定义分隔符">
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="enableNameRecognition" checked>
+                            启用百家姓姓名识别
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="results-section" id="resultsSection" style="display: none;">
+                <h2>识别结果</h2>
+                <div class="stats">
+                    <span id="totalCount">总计: 0条</span>
+                    <span id="successCount">成功: 0条</span>
+                    <span id="errorCount">失败: 0条</span>
+                </div>
+                <div class="table-container">
+                    <table id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th>序号</th>
+                                <th>地址</th>
+                                <th>姓名</th>
+                                <th>电话</th>
+                                <th>状态</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="button-group">
+                    <button id="exportBtn" class="btn btn-success">导出Excel</button>
+                    <button id="copyBtn" class="btn btn-info">复制结果</button>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>© 2024 批量地址信息识别工具 - 智能识别，高效处理</p>
+        </footer>
+        
+        <!-- 联系方式侧边栏 -->
+        <div class="contact-sidebar">
+            <div class="contact-content">
+                <h3>📧 意见反馈</h3>
+                <p>如有问题或建议，请联系开发者：</p>
+                <a href="mailto:344943495@qq.com" class="contact-email">
+                    <span class="email-icon">📧</span>
+                    344943495@qq.com
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 
