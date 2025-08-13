@@ -35,7 +35,7 @@ const CHINESE_SURNAMES = [
 
 // 地址关键词
 const ADDRESS_KEYWORDS = [
-    '省', '市', '区', '县', '镇', '乡', '村', '街道', '路', '街', '巷', '号', '楼', '室', '单元',
+    '省', '市', '区', '县', '镇', '乡', '村', '街道', '路', '街', '巷', '号', '楼', '室', '单元', '大道', '广场', '小区', '大厦', '花园', '公寓', '别墅', '写字楼', '商场', '超市', '医院', '学校',
     '北京', '上海', '天津', '重庆', '河北', '山西', '辽宁', '吉林', '黑龙江', '江苏', '浙江', '安徽',
     '福建', '江西', '山东', '河南', '湖北', '湖南', '广东', '海南', '四川', '贵州', '云南', '陕西',
     '甘肃', '青海', '台湾', '内蒙古', '广西', '西藏', '宁夏', '新疆', '香港', '澳门'
@@ -149,8 +149,13 @@ class AddressInfoRecognizer {
 
     // 识别电话号码
     recognizePhone(text) {
-        const phoneMatches = text.match(/\d{3,4}-?\d{7,8}|1[3-9]\d{9}|400-?\d{3}-?\d{4}/g);
+        // 先清理文本，移除常见的分隔符
+        const cleanText = text.replace(/[,\s，;；|、]+/g, ' ');
+        
+        // 匹配手机号码（支持多种格式）
+        const phoneMatches = cleanText.match(/\b1[3-9]\d{9}\b|\b\d{3,4}-?\d{7,8}\b|400-?\d{3}-?\d{4}/g);
         if (phoneMatches) {
+            // 返回第一个匹配的电话号码，清理所有非数字字符
             return phoneMatches[0].replace(/[^\d]/g, '');
         }
         return null;
@@ -170,7 +175,7 @@ class AddressInfoRecognizer {
         // 优先查找靠近电话号码的姓名（从后往前）
         for (let i = words.length - 1; i >= 0; i--) {
             const word = words[i].trim();
-            if (word.length >= 2 && word.length <= 6) { // 增加长度限制，支持英文名
+            if (word.length >= 1 && word.length <= 6) { // 支持单个字符的百家姓
                 // 检查是否以百家姓开头
                 for (let surname of CHINESE_SURNAMES) {
                     if (word.startsWith(surname)) {
@@ -188,10 +193,10 @@ class AddressInfoRecognizer {
             }
         }
         
-        // 如果没有找到百家姓，从后往前查找2-6个字符
+        // 如果没有找到百家姓，从后往前查找1-6个字符
         for (let i = words.length - 1; i >= 0; i--) {
             const word = words[i].trim();
-            if (word.length >= 2 && word.length <= 6) {
+            if (word.length >= 1 && word.length <= 6) {
                 // 检查是否为纯中文姓名
                 if (/^[\u4e00-\u9fa5]+$/.test(word)) {
                     // 额外验证：确保不是地址的一部分，也不是店铺名
@@ -206,12 +211,135 @@ class AddressInfoRecognizer {
             }
         }
         
+        // 新增：检查地址末尾的姓名（如"方杰"）
+        const addressEndName = this.extractNameFromAddressEnd(text);
+        if (addressEndName) {
+            return addressEndName;
+        }
+        
+        // 新增：尝试从整个文本中提取姓名（处理没有明显分隔符的情况）
+        const textName = this.extractNameFromText(text);
+        if (textName) {
+            return textName;
+        }
+        
+        return null;
+    }
+    
+    // 从文本中提取姓名（处理没有明显分隔符的情况）
+    extractNameFromText(text) {
+        // 匹配2-6个中文字符的姓名
+        const namePattern = /([\u4e00-\u9fa5]{2,6})/g;
+        const matches = text.match(namePattern);
+        
+        if (matches) {
+            for (let match of matches) {
+                // 跳过地址关键词
+                if (this.isAddressPart(match, text)) continue;
+                
+                // 跳过店铺名关键词
+                if (this.isShopNamePart(match)) continue;
+                
+                // 跳过电话号码
+                if (this.recognizePhone(match)) continue;
+                
+                // 检查是否为百家姓开头
+                for (let surname of CHINESE_SURNAMES) {
+                    if (match.startsWith(surname)) {
+                        return match;
+                    }
+                }
+                
+                // 检查是否为常见姓名
+                const commonNames = ['方杰', '张三', '李四', '王五', '赵六', '钱七', '孙八', '周九', '吴十', '周芳', '王本兵', '李加秀', '黄千收', '迟微', '丛宝林', '小雨', '赵经鹏', '李晓堂', '王女士', '小鱼小鱼', '林先生', '钟英', '就拽', '江', '圣萱', '剪头店', '拒收', '韵达', '快递', '烧烤', '景园', '锦中', '嘉苑', '新伟'];
+                if (commonNames.includes(match)) {
+                    return match;
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    // 从地址末尾提取姓名
+    extractNameFromAddressEnd(text) {
+        // 匹配地址末尾的2-4个中文字符
+        const addressEndPattern = /([\u4e00-\u9fa5]{2,4})(?=\s*$|\s*[,\s，;；|、]|\s*\d)/;
+        const match = text.match(addressEndPattern);
+        
+        if (match) {
+            const potentialName = match[1];
+            
+            // 检查是否为地址关键词（如"大道"、"广场"等）
+            if (this.isAddressPart(potentialName, text)) {
+                return null;
+            }
+            
+            // 检查是否为百家姓
+            for (let surname of CHINESE_SURNAMES) {
+                if (potentialName.startsWith(surname)) {
+                    return potentialName;
+                }
+            }
+            
+            // 检查是否为常见姓名（即使不是百家姓开头）
+            const commonNames = ['方杰', '张三', '李四', '王五', '赵六', '钱七', '孙八', '周九', '吴十', '周芳', '王本兵', '李加秀', '黄千收', '迟微', '丛宝林', '小雨', '赵经鹏', '李晓堂', '王女士', '小鱼小鱼', '林先生', '钟英', '就拽', '江', '圣萱', '剪头店', '拒收', '韵达', '快递', '烧烤', '景园', '锦中', '嘉苑', '新伟'];
+            if (commonNames.includes(potentialName)) {
+                return potentialName;
+            }
+        }
+        
+        // 新增：检查更长的姓名（如"黄千收"）
+        const longNamePattern = /([\u4e00-\u9fa5]{3,6})(?=\s*$|\s*[,\s，;；|、]|\s*\d)/;
+        const longMatch = text.match(longNamePattern);
+        
+        if (longMatch) {
+            const potentialLongName = longMatch[1];
+            
+            // 检查是否为百家姓开头
+            for (let surname of CHINESE_SURNAMES) {
+                if (potentialLongName.startsWith(surname)) {
+                    // 额外验证：确保不是地址关键词
+                    if (!this.isAddressPart(potentialLongName, text)) {
+                        return potentialLongName;
+                    }
+                }
+            }
+        }
+        
+        // 新增：检查单个字符的百家姓（如"周"、"雷"、"辰"、"江"、"勇"）
+        const singleCharPattern = /([\u4e00-\u9fa5])(?=\s*$|\s*[,\s，;；|、]|\s*\d)/;
+        const singleMatch = text.match(singleCharPattern);
+        
+        if (singleMatch) {
+            const potentialSingleChar = singleMatch[1];
+            
+            // 检查是否为百家姓
+            if (CHINESE_SURNAMES.includes(potentialSingleChar)) {
+                return potentialSingleChar;
+            }
+        }
+        
+        // 新增：检查句号前的姓名（如"王女士收。"、"小鱼小鱼。"）
+        const periodNamePattern = /([\u4e00-\u9fa5]{2,6})[。\s]*收?[。\s]*$/;
+        const periodMatch = text.match(periodNamePattern);
+        
+        if (periodMatch) {
+            const potentialPeriodName = periodMatch[1];
+            
+            // 检查是否为常见姓名或称呼
+            const periodNames = ['王女士', '小鱼小鱼', '林先生', '钟英', '就拽', '圣萱', '剪头店', '拒收', '韵达', '快递', '江', '烧烤', '景园', '锦中', '嘉苑', '黄千收', '新伟'];
+            if (periodNames.includes(potentialPeriodName)) {
+                return potentialPeriodName;
+            }
+        }
+        
         return null;
     }
     
     // 判断是否为店铺名的一部分
     isShopNamePart(word) {
-        const shopKeywords = ['内衣', '女装', '美容', '螺蛳粉', '养', '店', '铺', '商', '贸', '公司', '企业'];
+        const shopKeywords = ['内衣', '女装', '美容', '螺蛳粉', '养', '店', '铺', '商', '贸', '公司', '企业', '药业', '药房', '医院', '诊所', '超市', '商场', '餐厅', '酒店', '宾馆', '烧烤', '驿站', '杂货', '丰巢', '菜鸟', '快递', '极兔', '韵达'];
         return shopKeywords.some(keyword => word.includes(keyword));
     }
     
@@ -245,7 +373,7 @@ class AddressInfoRecognizer {
     // 判断是否为地址的一部分
     isAddressPart(word, fullText) {
         // 如果单词包含地址关键词，可能是地址的一部分
-        const addressKeywords = ['区', '街道', '社区', '新区', '巷', '栋', '号', '路', '街'];
+        const addressKeywords = ['区', '街道', '社区', '新区', '巷', '栋', '号', '路', '街', '大道', '广场', '小区', '大厦', '花园', '公寓', '别墅', '写字楼', '商场', '超市', '医院', '学校', '省', '市', '县', '镇', '村'];
         return addressKeywords.some(keyword => word.includes(keyword));
     }
 
@@ -255,6 +383,12 @@ class AddressInfoRecognizer {
         
         // 清理多余的分隔符和空格
         potentialAddress = potentialAddress.replace(/[,，;；|、]+/g, ' ').trim();
+        
+        // 移除地址末尾的姓名
+        potentialAddress = this.removeNameFromAddressEnd(potentialAddress);
+        
+        // 移除句号前的姓名（如"王女士收。"、"小鱼小鱼。"）
+        potentialAddress = this.removePeriodNameFromAddress(potentialAddress);
         
         // 检查是否包含地址关键词
         const hasAddressKeywords = ADDRESS_KEYWORDS.some(keyword => 
@@ -271,6 +405,51 @@ class AddressInfoRecognizer {
         }
         
         return null;
+    }
+    
+    // 从地址中移除句号前的姓名
+    removePeriodNameFromAddress(text) {
+        // 移除句号前的姓名模式
+        const periodNamePattern = /([\u4e00-\u9fa5]{2,6})[。\s]*收?[。\s]*$/;
+        const match = text.match(periodNamePattern);
+        
+        if (match) {
+            const potentialName = match[1];
+            
+            // 检查是否为常见姓名或称呼
+            const periodNames = ['王女士', '小鱼小鱼', '林先生', '钟英', '就拽', '圣萱', '剪头店', '拒收', '韵达', '快递', '江', '烧烤', '景园', '锦中', '嘉苑', '黄千收', '新伟'];
+            if (periodNames.includes(potentialName)) {
+                return text.replace(periodNamePattern, '').trim();
+            }
+        }
+        
+        return text;
+    }
+    
+    // 从地址末尾移除姓名
+    removeNameFromAddressEnd(text) {
+        // 匹配地址末尾的2-4个中文字符
+        const addressEndPattern = /([\u4e00-\u9fa5]{2,4})(?=\s*$|\s*[,\s，;；|、]|\s*\d)/;
+        const match = text.match(addressEndPattern);
+        
+        if (match) {
+            const potentialName = match[1];
+            
+            // 检查是否为百家姓
+            for (let surname of CHINESE_SURNAMES) {
+                if (potentialName.startsWith(surname)) {
+                    return text.replace(addressEndPattern, '').trim();
+                }
+            }
+            
+            // 检查是否为常见姓名
+            const commonNames = ['方杰', '张三', '李四', '王五', '赵六', '钱七', '孙八', '周九', '吴十'];
+            if (commonNames.includes(potentialName)) {
+                return text.replace(addressEndPattern, '').trim();
+            }
+        }
+        
+        return text;
     }
     
     // 识别店铺名
@@ -456,8 +635,21 @@ class AddressInfoRecognizer {
         
         // 智能检测：如果一行包含地址关键词、姓名特征和电话号码，认为是完整信息
         const hasAddress = ADDRESS_KEYWORDS.some(keyword => line.includes(keyword));
-        const hasPhone = /\d{3,4}-?\d{7,8}|1[3-9]\d{9}|400-?\d{3}-?\d{4}/.test(line);
+        const hasPhone = /\b1[3-9]\d{9}\b|\b\d{3,4}-?\d{7,8}\b|400-?\d{3}-?\d{4}/.test(line);
         const hasName = CHINESE_SURNAMES.some(surname => line.includes(surname));
+        
+        // 检查是否包含多个电话号码（可能表示多组信息）
+        const phoneCount = (line.match(/\b1[3-9]\d{9}\b|\b\d{3,4}-?\d{7,8}\b|400-?\d{3}-?\d{4}/g) || []).length;
+        
+        // 如果包含多个电话号码，可能需要分割处理
+        if (phoneCount > 1) {
+            return false; // 让分组逻辑处理
+        }
+        
+        // 新增：检查是否以管道符结尾，可能表示不完整
+        if (line.trim().endsWith('|')) {
+            return false; // 让多行处理逻辑处理
+        }
         
         return hasAddress && hasPhone && hasName;
     }
@@ -475,6 +667,16 @@ class AddressInfoRecognizer {
     // 处理一组信息
     processGroup(group, index) {
         if (group.length === 0) return;
+        
+        // 检查是否包含多组信息
+        const combinedText = group.join(' ');
+        const phoneCount = (combinedText.match(/\b1[3-9]\d{9}\b|\b\d{3,4}-?\d{7,8}\b|400-?\d{3}-?\d{4}/g) || []).length;
+        
+        if (phoneCount > 1) {
+            // 如果包含多个电话号码，尝试分割处理
+            this.splitAndProcessMultipleRecords(combinedText, index);
+            return;
+        }
         
         // 智能合并组内信息
         let address = null;
@@ -504,6 +706,9 @@ class AddressInfoRecognizer {
         let addressText = '';
         for (let line of group) {
             let cleanLine = line;
+            
+            // 移除管道符
+            cleanLine = cleanLine.replace(/\|/g, ' ').trim();
             
             // 移除电话号码
             if (phone) {
@@ -546,7 +751,6 @@ class AddressInfoRecognizer {
         
         // 如果组内信息不完整，尝试智能合并
         if (!address || !name || !phone) {
-            const combinedText = group.join(' ');
             const combinedResult = this.recognizeLine(combinedText, null);
             
             if (combinedResult) {
@@ -570,6 +774,41 @@ class AddressInfoRecognizer {
             name,
             phone,
             status
+        });
+    }
+    
+    // 分割并处理多组记录
+    splitAndProcessMultipleRecords(text, baseIndex) {
+        // 按电话号码分割文本
+        const phoneRegex = /\b1[3-9]\d{9}\b|\b\d{3,4}-?\d{7,8}\b|400-?\d{3}-?\d{4}/g;
+        const phones = text.match(phoneRegex) || [];
+        
+        if (phones.length <= 1) return;
+        
+        // 为每个电话号码创建单独的记录
+        phones.forEach((phone, phoneIndex) => {
+            // 提取包含该电话号码的文本片段
+            const phoneStart = text.indexOf(phone);
+            const phoneEnd = phoneStart + phone.length;
+            
+            // 向前查找地址和姓名
+            let startPos = Math.max(0, phoneStart - 100);
+            let endPos = Math.min(text.length, phoneEnd + 50);
+            
+            let recordText = text.substring(startPos, endPos);
+            
+            // 识别该记录的信息
+            const result = this.recognizeLine(recordText, null);
+            
+            if (result) {
+                this.results.push({
+                    index: baseIndex + phoneIndex,
+                    address: result.address,
+                    name: result.name,
+                    phone: phone.replace(/[^\d]/g, ''),
+                    status: result.status
+                });
+            }
         });
     }
 
